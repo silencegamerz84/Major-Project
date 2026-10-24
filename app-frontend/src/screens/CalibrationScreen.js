@@ -114,6 +114,23 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
     setTrainResult(null);
   }, [backendUrl]);
 
+  // Validation: Check if LIVE calibration values are sufficiently higher than IDLE baseline
+  const isValidationPassing = React.useMemo(() => {
+    if (!idleStats || !liveStats) return false;
+    const idleNcv = idleStats.mean_ncv ?? 0;
+    const liveNcv = liveStats.mean_ncv ?? 0;
+    const idleS1 = idleStats.mean_s1 ?? 0;
+    const liveS1 = liveStats.mean_s1 ?? 0;
+
+    const ncvDelta = liveNcv - idleNcv;
+    const s1Delta = Math.abs(liveS1 - idleS1);
+
+    const hasNcvSeparation = ncvDelta >= 0.015 || (idleNcv > 0 && liveNcv >= idleNcv * 1.4);
+    const hasMagSeparation = s1Delta >= 0.01;
+
+    return hasNcvSeparation || hasMagSeparation;
+  }, [idleStats, liveStats]);
+
   // ─── Train ML Model ───
   const trainModel = useCallback(async () => {
     setTraining(true);
@@ -147,7 +164,7 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
     }
   }, [backendUrl, onComplete]);
 
-  const canTrain = idleStatus === 'complete' && liveStatus === 'complete';
+  const canTrain = idleStatus === 'complete' && liveStatus === 'complete' && isValidationPassing;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -217,6 +234,17 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
 
       {/* Train Model Button */}
       <View style={styles.trainSection}>
+        {idleStatus === 'complete' && liveStatus === 'complete' && !isValidationPassing && (
+          <View style={styles.validationWarningBox}>
+            <Text style={styles.validationWarningTitle}>⚠️ INVALID CALIBRATION: NO SIGNAL DELTA</Text>
+            <Text style={styles.validationWarningText}>
+              The recorded LIVE wire signal (NCV: {Number(liveStats?.mean_ncv || 0).toFixed(4)}V) is identical to the IDLE baseline (NCV: {Number(idleStats?.mean_ncv || 0).toFixed(4)}V).
+              {'\n'}Training on identical data will lock the scanner in a false positive state.
+              Verify your wire is energized, the probe shield is grounded to ESP32 GND, and retry Step 2.
+            </Text>
+          </View>
+        )}
+
         {trainResult && (
           <View style={styles.trainResults}>
             <Text style={styles.trainResultTitle}>MODEL METRICS</Text>
@@ -261,7 +289,9 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
 
         {!canTrain && (
           <Text style={styles.trainHint}>
-            Complete both calibration steps to enable model training
+            {idleStatus !== 'complete' || liveStatus !== 'complete'
+              ? 'Complete both calibration steps to enable model training'
+              : 'LIVE reference must be significantly higher than IDLE baseline to train'}
           </Text>
         )}
       </View>
@@ -327,6 +357,28 @@ const styles = StyleSheet.create({
   trainSection: {
     padding: 16,
     marginTop: 8,
+  },
+  validationWarningBox: {
+    backgroundColor: '#EF444415',
+    borderWidth: 1,
+    borderColor: '#EF444480',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  validationWarningTitle: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 1,
+  },
+  validationWarningText: {
+    color: '#F87171',
+    fontSize: 10,
+    lineHeight: 15,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
   },
   trainResults: {
     backgroundColor: '#111317',

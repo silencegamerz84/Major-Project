@@ -53,6 +53,8 @@ export default function App() {
         if (!isTimedOut) {
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
         }
       } else {
         if (isTimedOut) {
@@ -100,6 +102,8 @@ export default function App() {
             if (viewRef.current === 'scanner') {
               if (!espConnected) {
                 setCurrentState('DISCONNECTED');
+                setNcvHistory([]);
+                setMagHistory([]);
                 if (isScanningRef.current) {
                   setIsScanning(false);
                   setAutoPausedByDisconnect(true);
@@ -136,6 +140,8 @@ export default function App() {
           setConnected(false);
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
           setTelemetry((prev) => ({ ...prev, esp32_connected: false }));
           if (viewRef.current === 'scanner' && isScanningRef.current) {
             setIsScanning(false);
@@ -147,6 +153,8 @@ export default function App() {
         ws.onerror = () => {
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
           ws.close();
         };
 
@@ -154,6 +162,8 @@ export default function App() {
       } catch (err) {
         setIsTimedOut(true);
         setCurrentState('DISCONNECTED');
+        setNcvHistory([]);
+        setMagHistory([]);
         reconnectTimeout = setTimeout(connect, 2000);
       }
     };

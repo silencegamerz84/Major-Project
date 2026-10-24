@@ -63,40 +63,58 @@ def extract_features(sample: dict, use_smoothing: bool = True) -> list:
 # Synthetic Data Generation
 # ─────────────────────────────────────────────────────────
 
+def clean_live_samples(live_samples: list, max_idle_ncv: float) -> list:
+    """
+    Filter out initial air/approach frames from live calibration.
+    When a user begins live recording, the first few seconds are often spent moving
+    the wand toward the wire, capturing idle ambient values (e.g. 0.08V).
+    We only retain samples that represent genuine wire contact/proximity.
+    """
+    valid = [s for s in live_samples if float(s.get("ncv", 0)) > (max_idle_ncv + 0.05)]
+    if len(valid) >= 10:
+        return valid
+    # Fallback to top 50% highest NCV samples
+    sorted_samples = sorted(live_samples, key=lambda s: float(s.get("ncv", 0)), reverse=True)
+    return sorted_samples[:max(10, len(live_samples) // 2)]
+
+
 def generate_synthetic_damaged(idle_samples: list, live_samples: list) -> list:
     """
-    Generate synthetic DAMAGED-state samples by taking the recorded LIVE data samples
-    and overwriting their ncv feature to sit exactly at the mathematical midpoint:
-    (max_idle_ncv + min_live_ncv) / 2.0.
-    
-    This explicitly trains the model to recognize a sudden voltage drop boundary
-    without overlapping into the ambient noise floor.
+    Generate synthetic DAMAGED-state samples by taking recorded LIVE samples
+    and synthesizing voltage-drop samples strictly bounded between:
+    max(IDLE) + margin and min(LIVE) - margin.
     """
     if not idle_samples or not live_samples:
         return []
 
     max_idle_ncv = max(float(s.get("ncv", 0)) for s in idle_samples)
-    min_live_ncv = min(float(s.get("ncv", 0)) for s in live_samples)
+    cleaned_live = clean_live_samples(live_samples, max_idle_ncv)
 
-    # In case the wand was briefly lifted during live calibration recording,
-    # isolate the live contact samples so midpoint never overlaps into ambient noise
-    if min_live_ncv <= max_idle_ncv:
-        above_idle = [float(s.get("ncv", 0)) for s in live_samples if float(s.get("ncv", 0)) > max_idle_ncv]
-        if above_idle:
-            min_live_ncv = min(above_idle)
+    live_ncvs = [float(s.get("ncv", 0)) for s in cleaned_live]
+    min_live_ncv = min(live_ncvs)
+    max_live_ncv = max(live_ncvs)
 
-    midpoint_ncv = (max_idle_ncv + min_live_ncv) / 2.0
+    # In a broken wire, the field collapses below healthy live wire levels.
+    # The damaged zone is between idle noise ceiling and live contact floor.
+    delta = min_live_ncv - max_idle_ncv
+    margin = 0.10 * delta if delta > 0 else 0.01
+
+    lower_bound = max_idle_ncv + margin
+    upper_bound = max(lower_bound + 0.02, min_live_ncv - margin)
+    midpoint_ncv = (lower_bound + upper_bound) / 2.0
 
     logger.info(
-        f"Synthesizing DAMAGED dataset at exact midpoint: "
-        f"max_idle_ncv={max_idle_ncv:.4f}, min_live_ncv={min_live_ncv:.4f}, "
-        f"damaged_midpoint={midpoint_ncv:.4f}"
+        f"Synthesizing DAMAGED dataset: max_idle={max_idle_ncv:.4f}, "
+        f"live_range=[{min_live_ncv:.4f}, {max_live_ncv:.4f}], "
+        f"damaged_zone=[{lower_bound:.4f}, {upper_bound:.4f}], midpoint={midpoint_ncv:.4f}"
     )
 
     damaged_features = []
-    for sample in live_samples:
+    for i, sample in enumerate(cleaned_live):
         s_copy = dict(sample)
-        s_copy["ncv"] = midpoint_ncv
+        ratio = (i % 7) / 6.0
+        synth_ncv = lower_bound + ratio * (upper_bound - lower_bound)
+        s_copy["ncv"] = synth_ncv
         damaged_features.append(extract_features(s_copy, use_smoothing=False))
 
     return damaged_features
@@ -109,27 +127,26 @@ def generate_synthetic_damaged(idle_samples: list, live_samples: list) -> list:
 def train_model(idle_samples: list, live_samples: list) -> dict:
     """
     Train a RandomForestClassifier on real calibration data + synthetic damaged midpoint data.
+    Cleans out approach/air samples from live data so the model doesn't associate low NCV with LIVE.
     """
     reset_feature_buffers()
     max_idle_ncv = max(float(s.get("ncv", 0)) for s in idle_samples)
-    min_live_ncv = min(float(s.get("ncv", 0)) for s in live_samples)
-    if min_live_ncv <= max_idle_ncv:
-        above_idle = [float(s.get("ncv", 0)) for s in live_samples if float(s.get("ncv", 0)) > max_idle_ncv]
-        if above_idle:
-            min_live_ncv = min(above_idle)
+    cleaned_live = clean_live_samples(live_samples, max_idle_ncv)
 
+    live_ncvs = [float(s.get("ncv", 0)) for s in cleaned_live]
+    min_live_ncv = min(live_ncvs)
     midpoint_ncv = (max_idle_ncv + min_live_ncv) / 2.0
 
     logger.info(
-        f"Training ML model with strict midpoint boundary synthesis: "
-        f"max_idle={max_idle_ncv:.4f}, min_live={min_live_ncv:.4f}, midpoint={midpoint_ncv:.4f}"
+        f"Training ML model: max_idle={max_idle_ncv:.4f}, min_live={min_live_ncv:.4f}, "
+        f"cleaned_live_count={len(cleaned_live)}/{len(live_samples)}"
     )
 
-    # Extract features from real calibration samples (exact calibration values)
+    # Extract features from real calibration samples
     idle_features = [extract_features(s, use_smoothing=False) for s in idle_samples]
-    live_features = [extract_features(s, use_smoothing=False) for s in live_samples]
+    live_features = [extract_features(s, use_smoothing=False) for s in cleaned_live]
 
-    # Generate synthetic DAMAGED samples at exact midpoint
+    # Generate synthetic DAMAGED samples
     damaged_features = generate_synthetic_damaged(idle_samples, live_samples)
     reset_feature_buffers()
 

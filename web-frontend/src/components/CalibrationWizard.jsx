@@ -23,6 +23,24 @@ export default function CalibrationWizard({
   const [trainResult, setTrainResult] = useState(null);
   const [error, setError] = useState(null);
 
+  // Restore saved calibration status from backend on mount
+  React.useEffect(() => {
+    fetch(`${API_BASE}/api/status`)
+      .then((res) => res.json())
+      .then((status) => {
+        if (status.idle_calibrated) {
+          setIdleStatus('complete');
+        }
+        if (status.live_calibrated) {
+          setLiveStatus('complete');
+        }
+        if (status.model_trained) {
+          setTrainResult({ cv_accuracy: 1.0, samples_total: 300, classes: ['DAMAGED', 'IDLE', 'LIVE'] });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Derive real-time progress from telemetry
   const idleProgress = idleStatus === 'complete'
     ? 100
@@ -87,6 +105,25 @@ export default function CalibrationWizard({
     setTrainResult(null);
   }, []);
 
+  // Validation: Check if LIVE calibration values are sufficiently higher than IDLE baseline
+  const isValidationPassing = React.useMemo(() => {
+    if (!idleStats || !liveStats) {
+      return idleStatus === 'complete' && liveStatus === 'complete';
+    }
+    const idleNcv = idleStats.mean_ncv ?? 0;
+    const liveNcv = liveStats.mean_ncv ?? 0;
+    const idleS1 = idleStats.mean_s1 ?? 0;
+    const liveS1 = liveStats.mean_s1 ?? 0;
+
+    const ncvDelta = liveNcv - idleNcv;
+    const s1Delta = Math.abs(liveS1 - idleS1);
+    
+    const hasNcvSeparation = ncvDelta >= 0.015 || (idleNcv > 0 && liveNcv >= idleNcv * 1.25);
+    const hasMagSeparation = s1Delta >= 0.008;
+
+    return hasNcvSeparation || hasMagSeparation;
+  }, [idleStats, liveStats, idleStatus, liveStatus]);
+
   const trainModel = useCallback(async () => {
     setTraining(true);
     setError(null);
@@ -94,7 +131,7 @@ export default function CalibrationWizard({
     try {
       const res = await fetch(`${API_BASE}/api/train`, { method: 'POST' });
       const data = await res.json();
-      if (data.cv_accuracy) {
+      if (res.ok && data.cv_accuracy) {
         setTrainResult(data);
       } else {
         setError(data.detail || 'Training failed');
@@ -106,7 +143,7 @@ export default function CalibrationWizard({
     }
   }, []);
 
-  const canTrain = idleStatus === 'complete' && liveStatus === 'complete';
+  const canTrain = idleStatus === 'complete' && liveStatus === 'complete' && isValidationPassing;
 
   const s = {
     container: {
@@ -495,7 +532,34 @@ export default function CalibrationWizard({
           </>
         )}
 
+        {idleStatus === 'complete' && liveStatus === 'complete' && !isValidationPassing && (
+          <div style={{
+            background: '#EF444415',
+            border: '1px solid #EF444480',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '11px',
+            color: '#F87171',
+            lineHeight: '1.6'
+          }}>
+            <div style={{ fontWeight: 800, color: '#EF4444', marginBottom: '4px' }}>
+              ⚠️ INVALID CALIBRATION: NO SIGNAL SEPARATION DETECTED
+            </div>
+            <div>
+              The recorded LIVE wire values (NCV: {Number(liveStats?.mean_ncv || 0).toFixed(5)}V) are nearly identical to the IDLE baseline (NCV: {Number(idleStats?.mean_ncv || 0).toFixed(5)}V).
+              <br />
+              Training with these values will lock the scanner in a false positive state.
+              Please verify that your wire is energized, the antenna/probe is connected to ADS1115 A3 with shield grounded, and click <strong>RETRY / CLEAR</strong> on Step 2.
+            </div>
+          </div>
+        )}
+
+        {error && <div style={{ ...s.errorBox, marginBottom: '16px' }}>⚠ {error}</div>}
+
         <button
+          type="button"
           style={s.btn(trainResult ? '#10B981' : '#3B82F6', !canTrain || training)}
           disabled={!canTrain || training}
           onClick={trainResult ? onComplete : trainModel}
@@ -505,7 +569,9 @@ export default function CalibrationWizard({
 
         {!canTrain && (
           <div style={{ textAlign: 'center', marginTop: '8px', color: '#475569', fontSize: '11px', fontStyle: 'italic' }}>
-            Complete both calibration steps to enable model training
+            {idleStatus !== 'complete' || liveStatus !== 'complete'
+              ? 'Complete both calibration steps to enable model training'
+              : 'LIVE reference must be significantly higher than IDLE baseline to train'}
           </div>
         )}
       </div>

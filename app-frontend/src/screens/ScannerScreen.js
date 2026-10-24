@@ -48,6 +48,8 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
         if (!isTimedOut) {
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
         }
       } else {
         if (isTimedOut) {
@@ -89,6 +91,8 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
 
             if (!espConnected) {
               setCurrentState('DISCONNECTED');
+              setNcvHistory([]);
+              setMagHistory([]);
               return;
             }
 
@@ -116,6 +120,8 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
           setConnected(false);
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
           console.log('[WS] Disconnected, reconnecting in 2s...');
           reconnectTimeout = setTimeout(connect, 2000);
         };
@@ -124,6 +130,8 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
           console.warn('[WS] Error:', error.message);
           setIsTimedOut(true);
           setCurrentState('DISCONNECTED');
+          setNcvHistory([]);
+          setMagHistory([]);
           ws.close();
         };
 
@@ -132,6 +140,8 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
         console.warn('[WS] Connection failed:', e);
         setIsTimedOut(true);
         setCurrentState('DISCONNECTED');
+        setNcvHistory([]);
+        setMagHistory([]);
         reconnectTimeout = setTimeout(connect, 2000);
       }
     };

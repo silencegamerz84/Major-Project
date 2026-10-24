@@ -25,7 +25,7 @@ export default function WaveformCanvas({
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !data.length) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
@@ -57,6 +57,30 @@ export default function WaveformCanvas({
       ctx.lineTo(w - padding.right, y);
       ctx.stroke();
     }
+
+    // Title
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '600 9px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.letterSpacing = '1.5px';
+    ctx.fillText(title, padding.left, 14);
+
+    // Channel legend (bottom)
+    let legendX = padding.left;
+    channels.forEach((ch) => {
+      const color = COLORS[ch] || '#64748B';
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(legendX + 4, h - 10, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '500 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(ch.toUpperCase(), legendX + 12, h - 7);
+      legendX += 50;
+    });
+
+    if (!data.length) return;
 
     // Draw each channel
     channels.forEach((channel) => {
@@ -118,28 +142,6 @@ export default function WaveformCanvas({
         ctx.fillText(minVal.toFixed(3), padding.left - 6, padding.top + plotH);
         ctx.fillText(((maxVal + minVal) / 2).toFixed(3), padding.left - 6, padding.top + plotH / 2 + 3);
       }
-    });
-
-    // Title
-    ctx.fillStyle = '#94A3B8';
-    ctx.font = '600 9px JetBrains Mono, monospace';
-    ctx.textAlign = 'left';
-    ctx.letterSpacing = '1.5px';
-    ctx.fillText(title, padding.left, 14);
-
-    // Channel legend (bottom)
-    let legendX = padding.left;
-    channels.forEach((ch) => {
-      const color = COLORS[ch] || '#64748B';
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(legendX + 4, h - 10, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#94A3B8';
-      ctx.font = '500 8px JetBrains Mono, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(ch.toUpperCase(), legendX + 12, h - 7);
-      legendX += 50;
     });
   }, [data, channels, title]);
 
