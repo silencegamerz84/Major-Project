@@ -23,6 +23,26 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
   const [liveStats, setLiveStats] = useState(null);
   const [training, setTraining] = useState(false);
   const [trainResult, setTrainResult] = useState(null);
+  const [currentNcv, setCurrentNcv] = useState(null);
+
+  // Poll live probe telemetry continuously from /api/status so users see live readings
+  React.useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${backendUrl}/api/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.latest_reading && typeof data.latest_reading.ncv === 'number') {
+            setCurrentNcv(data.latest_reading.ncv);
+          }
+        }
+      } catch (e) {
+        // Ignore network hiccups
+      }
+    }, 400);
+
+    return () => clearInterval(pollInterval);
+  }, [backendUrl]);
 
   // ─── Start IDLE calibration ───
   const startIdleCalibration = useCallback(async () => {
@@ -215,6 +235,9 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
         onStart={startIdleCalibration}
         onRetry={retryIdle}
         accentColor="#3B82F6"
+        targetRange="0.020V – 0.150V"
+        targetTip="Open-air background room noise floor"
+        currentNcv={currentNcv}
       />
 
       {/* Step 2: LIVE Wire Reference */}
@@ -230,6 +253,9 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
         onRetry={retryLive}
         disabled={idleStatus !== 'complete'}
         accentColor="#10B981"
+        targetRange="0.500V – 2.000V+"
+        targetTip="Direct contact with energized 230V wire"
+        currentNcv={currentNcv}
       />
 
       {/* Train Model Button */}
@@ -270,10 +296,10 @@ export default function CalibrationScreen({ backendUrl, onComplete, colors }) {
         <TouchableOpacity
           style={[
             styles.trainBtn,
-            !canTrain && styles.trainBtnDisabled,
+            !canTrain && !trainResult && styles.trainBtnDisabled,
           ]}
-          onPress={trainModel}
-          disabled={!canTrain || training}
+          onPress={trainResult ? onComplete : trainModel}
+          disabled={(!canTrain && !trainResult) || training}
         >
           {training ? (
             <View style={styles.trainingRow}>

@@ -11,7 +11,15 @@ import {
   View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+
+// Safe fallback for Audio on Expo Go where native ExponentAV module is removed or unavailable
+let Audio = null;
+try {
+  Audio = require('expo-av').Audio;
+} catch (e) {
+  console.log('[Audio] expo-av native module not available in this client, audio disabled');
+}
+
 import StatusBanner from '../components/StatusBanner';
 import WaveformChart from '../components/WaveformChart';
 import TelemetryGrid from '../components/TelemetryGrid';
@@ -206,15 +214,17 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
         }, 400);
 
         // Start audible alert
-        try {
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: 'https://www.soundjay.com/buttons/beep-01a.mp3' },
-            { isLooping: true, volume: 1.0 }
-          );
-          soundRef.current = sound;
-          await sound.playAsync();
-        } catch (e) {
-          console.warn('[Audio] Alert sound failed:', e.message);
+        if (Audio && Audio.Sound) {
+          try {
+            const { sound } = await Audio.Sound.createAsync(
+              { uri: 'https://www.soundjay.com/buttons/beep-01a.mp3' },
+              { isLooping: true, volume: 1.0 }
+            );
+            soundRef.current = sound;
+            await sound.playAsync();
+          } catch (e) {
+            console.warn('[Audio] Alert sound failed:', e.message);
+          }
         }
       } else if (currentState !== 'DAMAGED' && previousStateRef.current === 'DAMAGED') {
         if (hapticIntervalRef.current) {

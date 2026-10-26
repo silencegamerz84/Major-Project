@@ -20,6 +20,9 @@ export default function CalibrationCard({
   onRetry,
   disabled = false,
   accentColor = '#3B82F6',
+  targetRange = '',
+  targetTip = '',
+  currentNcv = null,
 }) {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -73,6 +76,12 @@ export default function CalibrationCard({
     error: '#EF4444',
   };
 
+  const isGoodQuality = step === 1 
+    ? (stats?.mean_ncv <= 0.150)
+    : (stats?.mean_ncv >= 0.400);
+
+  const isWarningQuality = step === 2 && stats?.mean_ncv >= 0.180 && stats?.mean_ncv < 0.400;
+
   return (
     <Animated.View style={[
       styles.card,
@@ -96,6 +105,53 @@ export default function CalibrationCard({
       <View style={styles.instructionBox}>
         <Text style={styles.instructionText}>📋 {instruction}</Text>
       </View>
+
+      {/* Target Benchmark Box */}
+      {targetRange ? (
+        <View style={styles.benchmarkBox}>
+          <View style={styles.benchmarkHeader}>
+            <Text style={styles.benchmarkTitle}>🎯 RECOMMENDED TARGET:</Text>
+            <Text style={[styles.benchmarkRange, { color: accentColor }]}>{targetRange}</Text>
+          </View>
+          <View style={styles.benchmarkFooter}>
+            <Text style={styles.benchmarkDesc}>{targetTip}</Text>
+            {currentNcv !== null && (
+              <View style={styles.probePill}>
+                <Text style={styles.probePillLabel}>Current Probe: </Text>
+                <Text style={[styles.probePillVal, { color: currentNcv >= 0.40 ? '#10B981' : (step === 1 ? (currentNcv <= 0.15 ? '#10B981' : '#F59E0B') : '#F59E0B') }]}>
+                  {Number(currentNcv).toFixed(3)}V
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      ) : null}
+
+      {/* Quality Assessment Badge after completion */}
+      {stats && status === 'complete' && stats.mean_ncv !== undefined && (
+        <View style={[
+          styles.qualityBadge,
+          {
+            backgroundColor: isGoodQuality ? '#10B98115' : (isWarningQuality ? '#F59E0B15' : '#EF444415'),
+            borderColor: isGoodQuality ? '#10B98160' : (isWarningQuality ? '#F59E0B60' : '#EF444460'),
+          }
+        ]}>
+          <Text style={[
+            styles.qualityText,
+            { color: isGoodQuality ? '#10B981' : (isWarningQuality ? '#F59E0B' : '#EF4444') }
+          ]}>
+            {step === 1
+              ? (isGoodQuality ? '✓ NORMAL NOISE FLOOR (GOOD)' : '⚠️ HIGH AMBIENT NOISE')
+              : (isGoodQuality ? '✓ STRONG 230V SIGNAL (EXCELLENT)' : (isWarningQuality ? '⚠️ ACCEPTABLE COUPLING — PRESS CLOSER' : '❌ NO SIGNAL DETECTED — CHECK WIRE POWER'))}
+          </Text>
+          <Text style={[
+            styles.qualityAvg,
+            { color: isGoodQuality ? '#10B981' : (isWarningQuality ? '#F59E0B' : '#EF4444') }
+          ]}>
+            AVG: {stats.mean_ncv.toFixed(3)}V
+          </Text>
+        </View>
+      )}
 
       {/* Progress bar */}
       <View style={styles.progressContainer}>
@@ -310,5 +366,86 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  benchmarkBox: {
+    backgroundColor: '#08090A',
+    borderColor: '#1E2229',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  benchmarkHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  benchmarkTitle: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  benchmarkRange: {
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  benchmarkFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  benchmarkDesc: {
+    color: '#64748B',
+    fontSize: 10,
+    flex: 1,
+  },
+  probePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D0F12',
+    borderWidth: 1,
+    borderColor: '#1E2229',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  probePillLabel: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  probePillVal: {
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  qualityBadge: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  qualityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    flex: 1,
+  },
+  qualityAvg: {
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    marginLeft: 6,
   },
 });

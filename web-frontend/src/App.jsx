@@ -209,8 +209,19 @@ export default function App() {
     };
   }, [currentState, isScanning, isEffectivelyDisconnected]);
 
+  const [calibrationKey, setCalibrationKey] = useState(0);
+
   const handleCalibrationComplete = useCallback(() => setView('scanner'), []);
-  const handleRecalibrate = useCallback(() => setView('calibration'), []);
+  const handleRecalibrate = useCallback(async () => {
+    try {
+      await fetch('/api/calibrate/reset/idle', { method: 'POST' });
+      await fetch('/api/calibrate/reset/live', { method: 'POST' });
+    } catch (e) {
+      console.warn('Backend calibration reset error:', e);
+    }
+    setCalibrationKey((k) => k + 1);
+    setView('calibration');
+  }, []);
 
   // ─── Styles ───
   const styles = {
@@ -407,6 +418,7 @@ export default function App() {
       {view === 'calibration' ? (
         <div style={styles.mainSingle}>
           <CalibrationWizard
+            key={calibrationKey}
             onComplete={handleCalibrationComplete}
             esp32Connected={!isEffectivelyDisconnected}
             esp32Ip={telemetry.esp32_ip || '192.168.0.170'}

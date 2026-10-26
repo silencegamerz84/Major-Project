@@ -23,24 +23,6 @@ export default function CalibrationWizard({
   const [trainResult, setTrainResult] = useState(null);
   const [error, setError] = useState(null);
 
-  // Restore saved calibration status from backend on mount
-  React.useEffect(() => {
-    fetch(`${API_BASE}/api/status`)
-      .then((res) => res.json())
-      .then((status) => {
-        if (status.idle_calibrated) {
-          setIdleStatus('complete');
-        }
-        if (status.live_calibrated) {
-          setLiveStatus('complete');
-        }
-        if (status.model_trained) {
-          setTrainResult({ cv_accuracy: 1.0, samples_total: 300, classes: ['DAMAGED', 'IDLE', 'LIVE'] });
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   // Derive real-time progress from telemetry
   const idleProgress = idleStatus === 'complete'
     ? 100
@@ -335,7 +317,7 @@ export default function CalibrationWizard({
     },
   };
 
-  const renderStep = (step, type, title, desc, instruction, status, progress, stats, accentColor, isPaused) => (
+  const renderStep = (step, type, title, desc, instruction, status, progress, stats, accentColor, isPaused, targetRange, targetTip) => (
     <div style={s.stepCard(status, accentColor, isPaused)} className="animate-slide-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <div style={s.stepBadge}>STEP {step}</div>
@@ -348,6 +330,66 @@ export default function CalibrationWizard({
       <div style={s.stepTitle}>{title}</div>
       <div style={s.stepDesc}>{desc}</div>
       <div style={s.instructionBox}>📋 {instruction}</div>
+
+      {/* Target Benchmark Box with Live Readout */}
+      <div style={{
+        background: '#08090A',
+        border: '1px solid #1E2229',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        marginBottom: '12px',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: '#94A3B8', letterSpacing: '1px' }}>
+            🎯 RECOMMENDED TARGET:
+          </span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 800, color: accentColor }}>
+            {targetRange}
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: '#64748B' }}>
+            {targetTip}
+          </span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#E2E8F0' }}>
+            Current Probe: <strong style={{ color: Number(telemetry.ncv || 0) >= 0.35 ? '#10B981' : (type === 'idle' ? '#38BDF8' : '#F59E0B') }}>
+              {Number(telemetry.ncv || 0).toFixed(3)}V
+            </strong>
+          </span>
+        </div>
+      </div>
+
+      {/* Quality Assessment Badge after recording */}
+      {stats && stats.mean_ncv !== undefined && (
+        <div style={{
+          background: type === 'idle'
+            ? (stats.mean_ncv <= 0.150 ? '#10B98115' : '#F59E0B15')
+            : (stats.mean_ncv >= 0.400 ? '#10B98115' : (stats.mean_ncv >= 0.180 ? '#F59E0B15' : '#EF444415')),
+          border: `1px solid ${type === 'idle'
+            ? (stats.mean_ncv <= 0.150 ? '#10B98160' : '#F59E0B60')
+            : (stats.mean_ncv >= 0.400 ? '#10B98160' : (stats.mean_ncv >= 0.180 ? '#F59E0B60' : '#EF444460'))}`,
+          borderRadius: '8px',
+          padding: '8px 12px',
+          marginBottom: '12px',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: '11px',
+          color: type === 'idle'
+            ? (stats.mean_ncv <= 0.150 ? '#10B981' : '#F59E0B')
+            : (stats.mean_ncv >= 0.400 ? '#10B981' : (stats.mean_ncv >= 0.180 ? '#F59E0B' : '#EF4444')),
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>
+            {type === 'idle'
+              ? (stats.mean_ncv <= 0.150 ? '✓ NORMAL NOISE FLOOR (EXCELLENT)' : '⚠️ HIGH AMBIENT NOISE FLOOR — Move further away from walls')
+              : (stats.mean_ncv >= 0.400 ? '✓ STRONG 230V WIRE COUPLING (EXCELLENT)' : (stats.mean_ncv >= 0.180 ? '⚠️ ACCEPTABLE COUPLING — Press probe closer to wire core' : '❌ WEAK OR NO WIRE SIGNAL — Check if wire is plugged in and switch is ON'))}
+          </span>
+          <span style={{ fontWeight: 800 }}>
+            AVG: {stats.mean_ncv.toFixed(3)}V
+          </span>
+        </div>
+      )}
 
       {/* Disconnect Alert during recording */}
       {isPaused && (
@@ -387,7 +429,7 @@ export default function CalibrationWizard({
         </div>
       )}
 
-      {/* Reconnected notification during active recording */}
+      {/* Active recording indicator */}
       {status === 'recording' && !isPaused && (
         <div style={{
           display: 'flex',
@@ -500,13 +542,17 @@ export default function CalibrationWizard({
       {renderStep(1, 'idle', 'IDLE Baseline — Ambient Air',
         'Establishes the electromagnetic noise floor. The wand must be held in open air, away from any wires.',
         'Hold the wand still in free air, at least 1 meter away from any electrical wiring.',
-        idleStatus, idleProgress, idleStats, '#3B82F6', isIdlePaused
+        idleStatus, idleProgress, idleStats, '#3B82F6', isIdlePaused,
+        '0.020V – 0.150V',
+        'Open-air ambient background room noise'
       )}
 
       {renderStep(2, 'live', 'LIVE Wire Reference — 230V Standard',
-        'Establishes the healthy operational envelope. Place wand against a known powered wire.',
-        'Press the wand flat against a known powered 230V wire or conduit. Hold steady.',
-        liveStatus, liveProgress, liveStats, '#10B981', isLivePaused
+        'Establishes the healthy operational envelope. Place wand directly against a powered live 230V wire.',
+        'Press the wand probe flat and touching against an energized powered 230V wire or cord. Hold steady.',
+        liveStatus, liveProgress, liveStats, '#10B981', isLivePaused,
+        '0.500V – 2.000V+',
+        'Direct contact with powered 230V live conductor'
       )}
 
       <div style={s.trainSection}>
