@@ -23,8 +23,10 @@ try {
 import StatusBanner from '../components/StatusBanner';
 import WaveformChart from '../components/WaveformChart';
 import TelemetryGrid from '../components/TelemetryGrid';
+import ScanSessionHeatmap from '../components/ScanSessionHeatmap';
 
 const MAX_WAVEFORM_POINTS = 80;
+const MAX_HEATMAP_POINTS = 100;
 
 export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
   const [currentState, setCurrentState] = useState('IDLE');
@@ -32,6 +34,7 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
   const [telemetry, setTelemetry] = useState({});
   const [ncvHistory, setNcvHistory] = useState([]);
   const [magHistory, setMagHistory] = useState([]);
+  const [heatmapHistory, setHeatmapHistory] = useState([]);
   const [connected, setConnected] = useState(false);
   const [isTimedOut, setIsTimedOut] = useState(false);
   const [packetCount, setPacketCount] = useState(0);
@@ -118,6 +121,11 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
             setMagHistory(prev => {
               const next = [...prev, { s1: data.s1, s2: data.s2, s3: data.s3 }];
               return next.length > MAX_WAVEFORM_POINTS ? next.slice(-MAX_WAVEFORM_POINTS) : next;
+            });
+
+            setHeatmapHistory(prev => {
+              const next = [...prev, { state: data.state || 'IDLE', timestamp: Date.now() }];
+              return next.length > MAX_HEATMAP_POINTS ? next.slice(-MAX_HEATMAP_POINTS) : next;
             });
           } catch (e) {
             console.warn('[WS] Parse error:', e);
@@ -335,6 +343,16 @@ export default function ScannerScreen({ wsUrl, backendUrl, colors }) {
           data={magHistory}
           channels={['s1', 's2', 's3']}
           title="MAGNETIC FLUX — HALL SENSORS"
+        />
+      </View>
+
+      {/* Timeline Ribbon Heatmap below Waveform Charts */}
+      <View style={{ opacity: isEffectivelyDisconnected || !isScanning ? 0.35 : 1 }}>
+        <ScanSessionHeatmap
+          history={heatmapHistory}
+          maxPoints={MAX_HEATMAP_POINTS}
+          isScanning={isScanning}
+          disabled={isEffectivelyDisconnected}
         />
       </View>
 

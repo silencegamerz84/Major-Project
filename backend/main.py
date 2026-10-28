@@ -313,52 +313,22 @@ async def esp32_worker():
                 reset_feature_buffers()
                 state.clear_telemetry()
             elif state.model is not None and not raw.get("disconnected"):
-                # Apply 10-frame rolling median filter on NCV reading
+                # Apply 10-frame rolling median filter on NCV reading to filter out sporadic electrical spikes
                 raw_ncv = float(raw.get("ncv", 0))
                 ncv_buffer.append(raw_ncv)
                 smoothed_ncv = float(np.median(ncv_buffer))
                 raw["ncv_raw"] = raw_ncv
                 raw["ncv"] = round(smoothed_ncv, 4)
-                ncv_tracking_buffer.append(smoothed_ncv)
 
-                # Scikit-Learn ML inference
+                # Pure ML Inference using the trained RandomForestClassifier
+                # The model classifies IDLE, LIVE, or DAMAGED based strictly on
+                # the 6-dimensional feature vector and your calibrated boundaries.
                 raw_predicted_state, raw_confidence = predict(raw, state.model)
 
-                # Robust Rule Override: If probe was scanning a healthy energized wire
-                # and the signal suddenly collapses (due to a wire break or moving past the break),
-                # trigger DAMAGED.
-                idle_samples = state.calibration_data.get("idle_samples", [])
-                live_samples = state.calibration_data.get("live_samples", [])
-                if idle_samples:
-                    idle_ncv_mean = float(np.mean([float(s.get("ncv", 0)) for s in idle_samples]))
-                else:
-                    idle_ncv_mean = 0.08
-
-                # If current NCV is in the idle/ambient noise floor or below it,
-                # it should never be classified as LIVE.
-                if smoothed_ncv <= (idle_ncv_mean + 0.015):
-                    if raw_predicted_state == "LIVE":
-                        raw_predicted_state = "IDLE"
-
-                # Detect sudden drop from active wire tracking:
-                if len(ncv_tracking_buffer) >= 10:
-                    tracking_peak = float(np.percentile(list(ncv_tracking_buffer), 85))
-                    # If we recently were on an energized wire (e.g. > 0.18V or > 1.6x idle)
-                    if tracking_peak > max(0.18, idle_ncv_mean * 1.6):
-                        # Wire break zone: signal has dropped significantly from the energized level
-                        drop_threshold = idle_ncv_mean + 0.35 * (tracking_peak - idle_ncv_mean)
-                        if smoothed_ncv < drop_threshold:
-                            raw_predicted_state = "DAMAGED"
-                            raw_confidence = 95.0
-                    # Direct wire proximity detection: if signal is distinctly above ambient floor
-                    elif smoothed_ncv > (idle_ncv_mean + 0.03):
-                        if raw_predicted_state == "IDLE":
-                            raw_predicted_state = "LIVE"
-                            raw_confidence = 88.0
-
+                # Append to rolling prediction buffer for majority-vote debouncing (smoothing)
                 prediction_buffer.append(raw_predicted_state)
 
-                # Majority vote smoothing
+                # Majority vote over rolling frames to avoid single-frame flickering
                 vote_counts = Counter(prediction_buffer)
                 classified_state = vote_counts.most_common(1)[0][0]
                 confidence = raw_confidence

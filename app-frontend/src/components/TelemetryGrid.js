@@ -14,6 +14,8 @@ const STATE_COLORS = {
   DAMAGED: '#EF4444',
 };
 
+import DigitalBubbleLevel from './DigitalBubbleLevel';
+
 export default function TelemetryGrid({ data = {}, state = 'IDLE' }) {
   const accentColor = STATE_COLORS[state] || '#64748B';
 
@@ -22,12 +24,6 @@ export default function TelemetryGrid({ data = {}, state = 'IDLE' }) {
     { label: 'S2', sublabel: 'HALL-A1', value: data.s2, unit: 'V', color: '#8B5CF6' },
     { label: 'S3', sublabel: 'HALL-A2', value: data.s3, unit: 'V', color: '#F59E0B' },
     { label: 'NCV', sublabel: 'E-FIELD', value: data.ncv, unit: 'V', color: '#10B981' },
-  ];
-
-  const tiltAxes = [
-    { label: 'TILT-X', value: data.tiltX, unit: 'm/s²' },
-    { label: 'TILT-Y', value: data.tiltY, unit: 'm/s²' },
-    { label: 'TILT-Z', value: data.tiltZ, unit: 'm/s²' },
   ];
 
   return (
@@ -47,18 +43,16 @@ export default function TelemetryGrid({ data = {}, state = 'IDLE' }) {
         ))}
       </View>
 
-      {/* Tilt Orientation */}
-      <Text style={styles.sectionTitle}>3-AXIS ORIENTATION</Text>
-      <View style={styles.tiltRow}>
-        {tiltAxes.map((axis) => (
-          <View key={axis.label} style={styles.tiltCard}>
-            <Text style={styles.tiltLabel}>{axis.label}</Text>
-            <Text style={styles.tiltValue}>
-              {axis.value !== undefined ? axis.value.toFixed(3) : '-.---'}
-            </Text>
-            <Text style={styles.tiltUnit}>{axis.unit}</Text>
-          </View>
-        ))}
+      {/* Digital Bubble Level replacing raw numbers */}
+      <Text style={styles.sectionTitle}>MPU-6050 SPATIAL ORIENTATION (DIGITAL LEVEL)</Text>
+      <View style={styles.levelCard}>
+        <DigitalBubbleLevel
+          tiltX={data.tiltX}
+          tiltY={data.tiltY}
+          tiltZ={data.tiltZ}
+          size={110}
+          disabled={state === 'DISCONNECTED'}
+        />
       </View>
     </View>
   );
@@ -115,37 +109,13 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
   },
-  tiltRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  tiltCard: {
-    flex: 1,
+  levelCard: {
     backgroundColor: '#111317',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1E2229',
-    padding: 10,
+    padding: 12,
     alignItems: 'center',
-  },
-  tiltLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-  },
-  tiltValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#E2E8F0',
-    marginTop: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-  },
-  tiltUnit: {
-    fontSize: 8,
-    color: '#475569',
-    marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    justifyContent: 'center',
   },
 });

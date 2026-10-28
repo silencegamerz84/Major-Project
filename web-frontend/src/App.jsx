@@ -10,9 +10,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CalibrationWizard from './components/CalibrationWizard';
 import TelemetryHUD from './components/TelemetryHUD';
 import WaveformCanvas from './components/WaveformCanvas';
+import ScanSessionHeatmap from './components/ScanSessionHeatmap';
 
 const WS_URL = `ws://${window.location.hostname || 'localhost'}:8000/ws/stream`;
 const MAX_HISTORY = 100;
+const MAX_HEATMAP_POINTS = 300; // 30 seconds @ 100ms interval
 
 export default function App() {
   const [view, setView] = useState('calibration'); // 'calibration' | 'scanner'
@@ -21,6 +23,7 @@ export default function App() {
   const [confidence, setConfidence] = useState(0);
   const [ncvHistory, setNcvHistory] = useState([]);
   const [magHistory, setMagHistory] = useState([]);
+  const [heatmapHistory, setHeatmapHistory] = useState([]);
   const [connected, setConnected] = useState(false);
   const [packetCount, setPacketCount] = useState(0);
   const [isScanning, setIsScanning] = useState(true);
@@ -127,6 +130,10 @@ export default function App() {
                 setMagHistory((prev) => {
                   const next = [...prev, { s1: data.s1, s2: data.s2, s3: data.s3 }];
                   return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+                });
+                setHeatmapHistory((prev) => {
+                  const next = [...prev, { state: data.state || 'IDLE', timestamp: Date.now() }];
+                  return next.length > MAX_HEATMAP_POINTS ? next.slice(-MAX_HEATMAP_POINTS) : next;
                 });
               }
             }
@@ -516,6 +523,13 @@ export default function App() {
                 channels={['s1', 's2', 's3']}
                 title="MAGNETIC FLUX — HALL SENSORS (S1 / S2 / S3)"
                 height={180}
+              />
+              <ScanSessionHeatmap
+                history={heatmapHistory}
+                maxPoints={MAX_HEATMAP_POINTS}
+                intervalMs={100}
+                isScanning={isScanning}
+                disabled={isEffectivelyDisconnected}
               />
             </div>
 

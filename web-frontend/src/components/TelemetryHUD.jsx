@@ -28,6 +28,8 @@ const TILT_CONFIG = [
   { key: 'tiltZ', label: 'Z-AXIS', unit: 'm/s²' },
 ];
 
+import DigitalBubbleLevel from './DigitalBubbleLevel';
+
 export default function TelemetryHUD({
   data = {},
   state = 'IDLE',
@@ -60,12 +62,6 @@ export default function TelemetryHUD({
   const gridStyle = {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px',
-  };
-
-  const tiltGridStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
     gap: '8px',
   };
 
@@ -280,47 +276,29 @@ export default function TelemetryHUD({
         </div>
       </div>
 
-      {/* ─── Accelerometer / Tilt ─── */}
+      {/* ─── Digital Bubble Level (Replacing raw MPU6050 numbers) ─── */}
       <div>
-        <div style={sectionTitleStyle}>MPU-6050 SPATIAL ORIENTATION</div>
-        <div style={tiltGridStyle}>
-          {TILT_CONFIG.map(({ key, label, unit }) => {
-            const val = data[key] !== undefined ? Number(data[key]) : 0;
-            return (
-              <div
-                key={key}
-                style={{
-                  background: '#111317',
-                  border: '1px solid #1E2229',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  textAlign: 'center',
-                  opacity: isDisconnected ? 0.4 : 1,
-                  filter: isDisconnected ? 'grayscale(80%)' : 'none',
-                  transition: 'all 0.3s ease',
-                }}
-              >
-                <div style={{
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: '9px',
-                  color: '#64748B',
-                  letterSpacing: '1px',
-                }}>
-                  {label}
-                </div>
-                <div style={{
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: isDisconnected ? '#64748B' : '#94A3B8',
-                  marginTop: '2px',
-                }}>
-                  {isDisconnected ? '—' : val.toFixed(2)}
-                  <span style={{ fontSize: '8px', color: '#475569', marginLeft: '2px' }}>{unit}</span>
-                </div>
-              </div>
-            );
-          })}
+        <div style={sectionTitleStyle}>MPU-6050 SPATIAL ORIENTATION (DIGITAL BUBBLE LEVEL)</div>
+        <div style={{
+          background: '#111317',
+          border: '1px solid #1E2229',
+          borderRadius: '10px',
+          padding: '14px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: isDisconnected ? 0.4 : 1,
+          filter: isDisconnected ? 'grayscale(80%)' : 'none',
+          transition: 'all 0.3s ease',
+        }}>
+          <DigitalBubbleLevel
+            tiltX={data.tiltX}
+            tiltY={data.tiltY}
+            tiltZ={data.tiltZ}
+            size={120}
+            disabled={isDisconnected}
+          />
         </div>
       </div>
     </div>

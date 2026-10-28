@@ -48,3 +48,14 @@ desktop.ini
 # Logs
 logs/
 *.log
+
+# Reports and Report Generation Assets
+*.docx
+*.doc
+*.pdf
+~$*
+report_assets/
+compile_word_report.py
+generate_report_assets.py
+*Report*
+
